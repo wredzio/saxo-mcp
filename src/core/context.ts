@@ -1,7 +1,22 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { RequestContext } from '../shared/types/context.js';
 import type { CancellationToken } from '../shared/utils/cancellation.js';
 import { createCancellationToken } from '../shared/utils/cancellation.js';
 import { sharedLogger as logger } from '../shared/utils/logger.js';
+
+/**
+ * AsyncLocalStorage for passing auth context through async call chains.
+ * This allows tool handlers to access auth context without relying on
+ * the MCP SDK to pass request IDs.
+ */
+export const authContextStorage = new AsyncLocalStorage<RequestContext>();
+
+/**
+ * Get the current auth context from AsyncLocalStorage.
+ */
+export function getCurrentAuthContext(): RequestContext | undefined {
+  return authContextStorage.getStore();
+}
 
 /**
  * Global registry for request contexts.

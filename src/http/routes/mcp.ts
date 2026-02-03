@@ -8,8 +8,10 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { toFetchResponse, toReqRes } from 'fetch-to-node';
 import { Hono } from 'hono';
 import { config } from '../../config/env.js';
-import { contextRegistry } from '../../core/context.js';
+import { authContextStorage, contextRegistry } from '../../core/context.js';
 import { getSessionStore } from '../../shared/storage/singleton.js';
+import type { RequestContext } from '../../shared/types/context.js';
+import { createCancellationToken } from '../../shared/utils/cancellation.js';
 import { logger } from '../../shared/utils/logger.js';
 import type { AuthContext } from '../middlewares/auth.js';
 
@@ -219,9 +221,28 @@ export function buildMcpRoutes(params: {
         });
       };
 
-      // Create request context if body has an ID
-      if (body && typeof body === 'object' && 'id' in body && body.id) {
-        requestId = body.id as string | number;
+      // Extract requestId from body if present
+      requestId =
+        body && typeof body === 'object' && 'id' in body
+          ? (body.id as string | number)
+          : undefined;
+
+      // Create request context (used by both registry and AsyncLocalStorage)
+      const requestContext: RequestContext = {
+        sessionId: plannedSid ?? sessionIdHeader,
+        cancellationToken: createCancellationToken(),
+        requestId,
+        timestamp: Date.now(),
+        authStrategy: authContext?.strategy,
+        authHeaders: authContext?.authHeaders,
+        resolvedHeaders: authContext?.resolvedHeaders,
+        providerToken: authContext?.providerToken,
+        provider: authContext?.provider,
+        rsToken: authContext?.rsToken,
+      };
+
+      // Store in registry for legacy lookup by requestId
+      if (requestId) {
         contextRegistry.create(requestId, plannedSid ?? sessionIdHeader, {
           authStrategy: authContext?.strategy,
           authHeaders: authContext?.authHeaders,
@@ -234,8 +255,11 @@ export function buildMcpRoutes(params: {
 
       await ensureConnected(transport);
 
-      // SDK passes requestId to tool handlers, which look up auth context from registry
-      await transport.handleRequest(req, res, body);
+      // Run transport handling within AsyncLocalStorage context
+      // This makes auth context available to tool handlers via getCurrentAuthContext()
+      await authContextStorage.run(requestContext, async () => {
+        await transport.handleRequest(req, res, body);
+      });
 
       // Event-driven cleanup: delete context when response closes
       res.on('close', () => {
