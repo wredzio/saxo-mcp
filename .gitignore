@@ -72,7 +72,7 @@ cypress/downloads/
 ## Environment files
 .env
 .env.*
-!.env.example
+.mcp.json
 
 ## OS junk
 .DS_Store
