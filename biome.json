@@ -25,18 +25,6 @@
       }
     }
   },
-  "overrides": [
-    {
-      "includes": ["src/core/http.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noExplicitAny": "off"
-          }
-        }
-      }
-    }
-  ],
   "javascript": {
     "formatter": {
       "semicolons": "always",
